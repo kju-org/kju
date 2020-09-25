@@ -20,7 +20,7 @@ npm i kjujs --save
 2. run it with node:
 
 ```shell
-node index.js
+node kju.js
 // Running kju server on port 80
 ```
 
