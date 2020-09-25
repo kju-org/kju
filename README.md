@@ -1,5 +1,7 @@
 # kju - open communication framework
 
+![kju](https://kju-org.github.io/icon-box.png "kju")
+
 kju is an open and simple communication framework that works on a `request <-> response` pattern. 
 
 * Any participator can create a request with a number of predefined responses.
@@ -12,7 +14,7 @@ kju is an open and simple communication framework that works on a `request <-> r
 1. install via npm:
 
 ```shell
-npm i kju --save
+npm i kjujs --save
 ```
 
 2. run it with node:
