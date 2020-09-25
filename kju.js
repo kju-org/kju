@@ -93,6 +93,16 @@ var KJU = function(options) {
         return arr;
     }
 
+    router.route('/')
+
+        .get(function(req, res) {
+
+            res.json({
+                msg: "welcome to kju"
+            })
+
+        });
+
     router.route('/creationToken')
 
         // get a token
@@ -129,8 +139,9 @@ var KJU = function(options) {
                     return res.status(400).json({ err: 'invalid token' })
 
                 var msgId = new mongoose.Types.ObjectId();
+                var messageTag = req.body.messageTag || shortid.generate();
 
-                var consumerToken = jwt.sign({ msgId: msgId, hash: shortid.generate(), priv: 'redeem' }, KEY);
+                var consumerToken = jwt.sign({ msgId: msgId, messageTag: messageTag, priv: 'redeem' }, KEY);
 
                 var computedResponses = {};
 
@@ -173,6 +184,10 @@ var KJU = function(options) {
                             type: "bag",
                             properties: computedResponses
                         },
+                        messageTag: {
+                            type: "shortText",
+                            value: messageTag
+                        },
                         consumerToken: {
                             type: "longText",
                             value: consumerToken
@@ -183,6 +198,7 @@ var KJU = function(options) {
                         _id: msgId,
                         content: data.properties.content.value,
                         responses: responsesToArray(data.properties.responses.properties),
+                        messageTag: data.properties.messageTag.value,
                         consumerToken: data.properties.consumerToken.value
                     })
                 }, err => {
@@ -202,14 +218,55 @@ var KJU = function(options) {
         // get a single message
         .get(function(req, res) {
 
-            // TODO: check consumer token
+            var decoded = jwt.verify(req.query.token || req.body.token, KEY);
+
+            console.log(decoded);
+
+            if (!decoded || decoded.msgId != req.params.messageId)
+                return res.status(400).json({ err: 'invalid token' })
 
             OBJY.message(req.params.messageId).get((data) => {
+
+                if (decoded.messageTag != data.properties.messageTag.value)
+                    return res.status(400).json({ err: 'not authorized' })
+
                 res.json({
                     content: data.properties.content.value,
                     responses: responsesToArray(data.properties.responses.properties),
+                    messageTag: data.properties.messageTag.value,
                     consumerToken: data.properties.consumerToken.value
                 })
+            }, err => {
+                console.log(err)
+                res.status(404).json({ err: "error getting message" })
+            })
+        });
+
+    router.route('/messages')
+
+        // get a single message
+        .get(function(req, res) {
+
+            var decoded = jwt.verify(req.query.token || req.body.token, KEY);
+
+            if (!decoded)
+                return res.status(400).json({ err: 'invalid token' })
+
+            OBJY.messages({ "properties.messageTag.value": decoded.messageTag }).get((data) => {
+
+                var arr = [];
+
+                data.forEach(function(d) {
+                    arr.push({
+                        content: d.properties.content.value,
+                        responses: responsesToArray(d.properties.responses.properties),
+                        messageTag: d.properties.messageTag.value,
+                        consumerToken: d.properties.consumerToken.value
+                    })
+                })
+
+                res.json(arr);
+
             }, err => {
                 console.log(err)
                 res.status(404).json({ err: "error getting message" })
@@ -221,9 +278,15 @@ var KJU = function(options) {
         // get the responses for a message
         .get(function(req, res) {
 
-            // TODO: check consumer token
+            var decoded = jwt.verify(req.query.token || req.body.token, KEY);
+
+            if (!decoded || decoded.msgId != req.params.messageId)
+                return res.status(400).json({ err: 'invalid token' })
 
             OBJY.message(req.params.messageId).get((data) => {
+
+                if (decoded.messageTag != data.properties.messageTag.value)
+                    return res.status(400).json({ err: 'not authorized' })
 
                 OBJY.callLogs({ name: req.params.messageId }).get(data => {
 
@@ -253,11 +316,15 @@ var KJU = function(options) {
         // redeem a response
         .get(function(req, res) {
 
-            // TODO: check consumer token
+            var decoded = jwt.verify(req.query.token || req.body.token, KEY);
+
+            if (!decoded || decoded.msgId != req.params.messageId)
+                return res.status(400).json({ err: 'invalid token' })
 
             OBJY.message(req.params.messageId).get((data) => {
 
-                console.log('dataaaaa', data);
+                if (decoded.messageTag != data.properties.messageTag.value)
+                    return res.status(400).json({ err: 'not authorized' })
 
                 var resp = data.properties.responses.properties[req.params.responseId];
 
