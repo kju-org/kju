@@ -1,6 +1,6 @@
 # kju - open communication framework
 
-![kju](https://kju-org.github.io/icon-box.png "kju")
+![kju](https://kju-org.github.io/kju-header.png "kju")
 
 kju is an open and simple communication framework that works on a `request <-> response` pattern. 
 
