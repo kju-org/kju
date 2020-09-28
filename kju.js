@@ -25,6 +25,7 @@ var moment = require("moment");
 var jwt = require('jsonwebtoken');
 var mongoose = require('mongoose');
 var KEY = 'ASDDSGq2d,öa-#'
+var HOST = "europe-west3-spoocloud-202009.cloudfunctions.net";
 
 var app = express();
 
@@ -145,7 +146,7 @@ var KJU = function(options) {
 
                 var computedResponses = {};
 
-                var url = req.protocol + '://' + req.get('host') + '/kju-dummy'
+                var url = req.protocol + '://' + (HOST || req.get('host')) + '/kju-dummy'
 
                 if (Array.isArray(req.body.responses)) {
                     req.body.responses.forEach(res => {
