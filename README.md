@@ -36,6 +36,7 @@ Your kju server will offer the following REST Endpints:
 * `POST /creationToken` - Generate a token for creating messages
 * `POST /message?token=XXX` - Create a message
 * `GET /message/:messageId?token=XXX` - Get a raw message
+* `GET /messages?token=XXX` - Get a list of messages matching a messageTag (encoded inside the token)
 * `GET /message/:messageId/response/:responseId?token=XXX` - Redeem a response
 * `GET /message/:messageId/responses?token=XXX` - Get all responses for a message
 
