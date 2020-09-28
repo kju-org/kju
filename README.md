@@ -7,6 +7,8 @@ kju is an open and simple communication framework that works on a `request <-> r
 * Any participator can create a request with a number of predefined responses.
 * Any participator can redeem a response for a given request
 
+![Sequence Diagram](https://kju-org.github.io/sequence.png)
+
 > For detailed usage instructions, see the official [Documentation](https://kju-org.github.io)
 
 # Get started
