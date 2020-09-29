@@ -13,7 +13,6 @@
  - transport layer (email, whatsapp, ...)
  - response actions (puzzle-based kju actions like: [emails, http calls, ...])
  - rate limiter
-
 */
 
 const express = require('express');
@@ -24,10 +23,16 @@ var bodyParser = require('body-parser');
 var moment = require("moment");
 var jwt = require('jsonwebtoken');
 var mongoose = require('mongoose');
+const RateLimit = require('express-rate-limit');
+const RedisStore = require('rate-limit-redis');
+const Redis = require('ioredis');
+
+
 var KEY = 'ASDDSGq2d,öa-#'
 var HOST = "europe-west3-spoocloud-202009.cloudfunctions.net";
 
 var app = express();
+
 
 app.use(bodyParser.urlencoded({
     extended: true
@@ -62,6 +67,16 @@ var KJU = function(options) {
     OBJY.client('public');
     OBJY.app('kju');
 
+    const limiter = new RateLimit({
+        store: new RedisStore({
+            client: new Redis(options.redisCon || 'redis://localhost')
+        }),
+        windowMs: 10 * 60 * 1000,
+        max: 50, // limit each IP to 100 requests per windowMs
+        delayMs: 0 // disable delaying - full speed until the max limit is reached
+    });
+
+    app.use(limiter);
 
     OBJY.define({
         name: "message",
