@@ -73,7 +73,10 @@ var KJU = function(options) {
         }),
         windowMs: 10 * 60 * 1000,
         max: 50, // limit each IP to 100 requests per windowMs
-        delayMs: 0 // disable delaying - full speed until the max limit is reached
+        delayMs: 0, // disable delaying - full speed until the max limit is reached
+        message: {
+            err: "too many requests. Try again later"
+        }
     });
 
     app.use(limiter);
@@ -153,7 +156,9 @@ var KJU = function(options) {
                 if (data.length != 1)
                     return res.status(400).json({ err: 'token not found' })
 
-                if (!jwt.verify(req.query.token || req.body.token, KEY))
+                var decoded = jwt.verify(req.query.token || req.body.token, KEY);
+
+                if (!decoded)
                     return res.status(400).json({ err: 'invalid token' })
 
                 var msgId = new mongoose.Types.ObjectId();
@@ -212,6 +217,10 @@ var KJU = function(options) {
                         consumerToken: {
                             type: "longText",
                             value: consumerToken
+                        },
+                        createdByHash: {
+                            type: "shortText",
+                            value: decoded.hash
                         }
                     }
                 }).add(data => {
@@ -265,7 +274,40 @@ var KJU = function(options) {
                 console.log(err)
                 res.status(404).json({ err: "error getting message" })
             })
+        })
+
+
+        // delete a single message
+        .delete(function(req, res) {
+
+            var decoded = jwt.verify(req.query.token || req.body.token, KEY);
+
+            console.log(decoded);
+
+            if (!decoded)
+                return res.status(400).json({ err: 'invalid token' })
+
+            OBJY.message(req.params.messageId).get((data) => {
+
+                if (data.properties.createdByHash.value != decoded.hash) {
+                    return res.status(400).json({ err: 'not authorized' })
+                }
+
+                OBJY.message(req.params.messageId).remove((data) => {
+                    res.json({
+                        msg: 'ok'
+                    })
+                }, err => {
+                    console.log(err)
+                    res.status(404).json({ err: "error deleting message" })
+                })
+
+            }, err => {
+                console.log(err)
+                res.status(404).json({ err: "error getting message" })
+            })
         });
+
 
     router.route('/message/:messageId/ui')
 

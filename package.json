@@ -20,6 +20,7 @@
     "objy": "^0.5.112",
     "objy-catalog": "0.0.33",
     "rate-limit-redis": "^2.0.0",
-    "twilio": "^3.49.3"
+    "twilio": "^3.49.3",
+    "@sendgrid/mail": "^6.4.0"
   }
 }
