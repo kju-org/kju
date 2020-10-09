@@ -171,7 +171,7 @@ var KJU = function(options) {
                     return res.status(400).json({ err: 'token not found' })
 
                 var decoded = jwt.verify(req.query.token || req.body.token, KEY);
-
+                
                 if (!decoded)
                     return res.status(400).json({ err: 'invalid token' })
 
