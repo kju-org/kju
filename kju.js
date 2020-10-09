@@ -124,19 +124,33 @@ var KJU = function(options) {
 
         });
 
-    router.route('/creationToken')
+    router.route('/personalToken')
 
         // get a token
         .post(function(req, res) {
 
-            var token = jwt.sign({ hash: shortid.generate(), priv: '*' }, KEY);
+            var contact = (req.body || {}).contact;
+
+            if(!contact)
+            {
+                return res.status(400).json({err: 'no contact provided'});
+            }
+
+            var token = jwt.sign({ hash: shortid.generate(), priv: '*', contact: contact }, KEY);
 
             OBJY.token({
                 properties: {
                     data: token
                 }
             }).add(data => {
-                res.json(data.properties)
+                //res.json(data.properties)
+                if (options.transporter) options.transporter.transport({
+                    reciever: contact,
+                    content: 'Your personal token for kju: ' + token
+                });
+
+                    res.json({msg: 'token sent to you'});
+
             }, err => {
                 res.status(400).json({ err: err })
             })
