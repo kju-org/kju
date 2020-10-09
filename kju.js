@@ -149,7 +149,7 @@ var KJU = function(options) {
                     content: 'Your personal token for kju: ' + token
                 });
 
-                    res.json({msg: 'token sent to you'});
+                res.json({msg: 'token has been sent to you'});
 
             }, err => {
                 res.status(400).json({ err: err })
