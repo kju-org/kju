@@ -83,7 +83,7 @@ var KJU = function(options) {
 
     OBJY.define({
         name: "message",
-        pluralName: "mesages",
+        pluralName: "messages",
         observer: observer,
         storage: options.dbMapper,
     })
@@ -131,9 +131,8 @@ var KJU = function(options) {
 
             var contact = (req.body || {}).contact;
 
-            if(!contact)
-            {
-                return res.status(400).json({err: 'no contact provided'});
+            if (!contact) {
+                return res.status(400).json({ err: 'no contact provided' });
             }
 
             var token = jwt.sign({ hash: shortid.generate(), priv: '*', contact: contact }, KEY);
@@ -149,7 +148,7 @@ var KJU = function(options) {
                     content: 'Your personal token for kju: ' + token
                 });
 
-                res.json({msg: 'token has been sent to you'});
+                res.json({ msg: 'token has been sent to you' });
 
             }, err => {
                 res.status(400).json({ err: err })
@@ -224,6 +223,10 @@ var KJU = function(options) {
                             type: "shortText",
                             value: messageTag
                         },
+                        sender: {
+                            type: "shortText",
+                            value: decoded.contact
+                        },
                         reciever: {
                             type: "longText",
                             value: req.body.reciever
@@ -239,7 +242,13 @@ var KJU = function(options) {
                     }
                 }).add(data => {
 
-                    if (options.transporter) options.transporter.transport(req.body);
+                    var transportBody = req.body;
+
+                    transportBody._id = data._id;
+                    transportBody.responses = responsesToArray(data.properties.responses.properties);
+                    transportBody.consumerToken = consumerToken;
+
+                    if (options.transporter) options.transporter.transport(transportBody);
 
                     res.json({
                         _id: msgId,
@@ -406,9 +415,9 @@ var KJU = function(options) {
         });
 
 
-    router.route('/messages')
+    router.route('/messages/:queryType')
 
-        // get a single message
+        // get messages
         .get(function(req, res) {
 
             var decoded = jwt.verify(req.query.token || req.body.token, KEY);
@@ -416,26 +425,60 @@ var KJU = function(options) {
             if (!decoded)
                 return res.status(400).json({ err: 'invalid token' })
 
-            OBJY.messages({ "properties.messageTag.value": decoded.messageTag }).get((data) => {
+            switch (req.params.queryType) {
 
-                var arr = [];
+                case 'tag':
 
-                data.forEach(function(d) {
-                    arr.push({
-                        content: d.properties.content.value,
-                        responses: responsesToArray(d.properties.responses.properties),
-                        messageTag: d.properties.messageTag.value,
-                        consumerToken: d.properties.consumerToken.value
+                    OBJY.messages({ "properties.messageTag.value": decoded.messageTag }).get((data) => {
+
+                        var arr = [];
+
+                        data.forEach(function(d) {
+                            arr.push({
+                                content: d.properties.content.value,
+                                responses: responsesToArray(d.properties.responses.properties),
+                                messageTag: d.properties.messageTag.value,
+                                consumerToken: d.properties.consumerToken.value
+                            })
+                        })
+
+                        res.json(arr);
+
+                    }, err => {
+                        console.log(err)
+                        res.status(404).json({ err: "error getting message" })
                     })
-                })
 
-                res.json(arr);
+                    break;
 
-            }, err => {
-                console.log(err)
-                res.status(404).json({ err: "error getting message" })
-            })
+                case 'recieved':
+
+                    OBJY.messages({ "properties.reciever.value": { $regex: decoded.contact, $options: "i" } }).get((data) => {
+
+                        var arr = [];
+
+                        data.forEach(function(d) {
+                            arr.push({
+                                content: d.properties.content.value,
+                                responses: responsesToArray(d.properties.responses.properties),
+                                messageTag: d.properties.messageTag.value,
+                                consumerToken: d.properties.consumerToken.value
+                            })
+                        })
+
+                        res.json(arr);
+
+                    }, err => {
+                        console.log(err)
+                        res.status(404).json({ err: "error getting message" })
+                    })
+
+                    break;
+            }
+
+
         });
+
 
     router.route('/message/:messageId/responses')
 
@@ -475,7 +518,7 @@ var KJU = function(options) {
         });
 
 
-    router.route('/message/:messageId/response/:responseId')
+    router.route(['/message/:messageId/response/:responseId', '/message/ui/:messageId/response/:responseId'])
 
         // redeem a response
         .get(function(req, res) {
@@ -514,10 +557,44 @@ var KJU = function(options) {
                             value: req.params.responseId
                         }
                     }
-                }).add(data => {
-                    res.json({
-                        msg: "ok"
-                    })
+                }).add(_data => {
+                    if (req.originalUrl.includes('message/ui/')) {
+
+                        res.setHeader('Access-Control-Allow-Origin', '*');
+                        res.send(`<html>
+<head>
+    <title>kju</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/leto-css/leto/css/leto.min.css">
+</head>
+
+<body>
+    <div class="leto-frame leto-height-full" id="app">
+        <div class="leto-group leto-row leto-height-full leto-vertical-center leto-horizontal-center">
+            <div class="leto-display-block">
+                <div class="leto-text-xl">${data.properties.content.value}</div>
+                <br>
+                <div class="leto-text-lg">
+                    <i>- ${req.params.responseId}</i>
+                </div>
+                <br>
+                <div class="leto-button" onclick="window.close();">close</div>
+            </div>
+           
+        </div>
+        <center class="leto-text-sm leto-text-darker-grey">
+            This is a kju message. Learn more <a href="https://kju-org.github.io">here</a>.
+        </center>
+    </div>
+</body>
+
+</html>`);
+                    } else {
+                        res.json({
+                            msg: "ok"
+                        })
+                    }
+
                 }, err => {
                     res.status(400).json({ err: 'error redeeming response' })
                 })
