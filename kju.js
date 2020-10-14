@@ -27,7 +27,6 @@ const RateLimit = require('express-rate-limit');
 const RedisStore = require('rate-limit-redis');
 const Redis = require('ioredis');
 
-
 var KEY = 'ASDDSGq2d,öa-#'
 var HOST = "europe-west3-spoocloud-202009.cloudfunctions.net";
 
@@ -46,8 +45,6 @@ app.use(cors());
 app.options('*', cors());
 
 var router = express.Router();
-
-
 
 var observer = {
     initialize: function() {
@@ -170,7 +167,7 @@ var KJU = function(options) {
                     return res.status(400).json({ err: 'token not found' })
 
                 var decoded = jwt.verify(req.query.token || req.body.token, KEY);
-                
+
                 if (!decoded)
                     return res.status(400).json({ err: 'invalid token' })
 
@@ -248,7 +245,9 @@ var KJU = function(options) {
                     transportBody.responses = responsesToArray(data.properties.responses.properties);
                     transportBody.consumerToken = consumerToken;
 
-                    if (options.transporter) options.transporter.transport(transportBody);
+                    if (options.transporter) options.transporter.transport(transportBody, (data) => {
+
+                    });
 
                     res.json({
                         _id: msgId,
@@ -332,7 +331,7 @@ var KJU = function(options) {
         });
 
 
-    router.route('/message/:messageId/ui')
+    router.route('/ui/message/:messageId')
 
         // get a single message
         .get(function(req, res) {
@@ -429,13 +428,17 @@ var KJU = function(options) {
 
                 case 'tag':
 
-                    OBJY.messages({ "properties.messageTag.value": decoded.messageTag }).get((data) => {
+                    OBJY.messages({ "properties.messageTag.value": decoded.messageTag, $sort: '-created' }).get((data) => {
 
                         var arr = [];
 
                         data.forEach(function(d) {
                             arr.push({
+                                _id: d._id,
+                                created: d.created,
                                 content: d.properties.content.value,
+                                sender: (d.properties.sender || {}).value,
+                                reciever: d.properties.reciever.value,
                                 responses: responsesToArray(d.properties.responses.properties),
                                 messageTag: d.properties.messageTag.value,
                                 consumerToken: d.properties.consumerToken.value
@@ -453,13 +456,17 @@ var KJU = function(options) {
 
                 case 'recieved':
 
-                    OBJY.messages({ "properties.reciever.value": { $regex: decoded.contact, $options: "i" } }).get((data) => {
+                    OBJY.messages({ "properties.reciever.value": { $regex: decoded.contact, $options: "i" }, $page: req.query.$page || 1, $sort: '-created' }).get((data) => {
 
                         var arr = [];
 
                         data.forEach(function(d) {
                             arr.push({
+                                _id: d._id,
+                                created: d.created,
                                 content: d.properties.content.value,
+                                sender: (d.properties.sender || {}).value,
+                                reciever: d.properties.reciever.value,
                                 responses: responsesToArray(d.properties.responses.properties),
                                 messageTag: d.properties.messageTag.value,
                                 consumerToken: d.properties.consumerToken.value
@@ -475,7 +482,6 @@ var KJU = function(options) {
 
                     break;
             }
-
 
         });
 
@@ -518,7 +524,7 @@ var KJU = function(options) {
         });
 
 
-    router.route(['/message/:messageId/response/:responseId', '/message/ui/:messageId/response/:responseId'])
+    router.route(['/message/:messageId/response/:responseId', '/ui/message/:messageId/response/:responseId'])
 
         // redeem a response
         .get(function(req, res) {
@@ -558,7 +564,7 @@ var KJU = function(options) {
                         }
                     }
                 }).add(_data => {
-                    if (req.originalUrl.includes('message/ui/')) {
+                    if (req.originalUrl.includes('/ui/message/')) {
 
                         res.setHeader('Access-Control-Allow-Origin', '*');
                         res.send(`<html>
