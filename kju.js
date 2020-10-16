@@ -17,6 +17,7 @@
 
 const express = require('express');
 const OBJY = require('objy');
+const OBJY_CATALOG = require('objy-catalog');
 var shortid = require('shortid');
 var cors = require('cors');
 var bodyParser = require('body-parser');
@@ -82,21 +83,28 @@ var KJU = function(options) {
         name: "message",
         pluralName: "messages",
         observer: observer,
-        storage: options.dbMapper,
+        storage: new OBJY_CATALOG.mappers.storage.mongo(OBJY).useConnection(options.dbMapper, function() {})
     })
 
     OBJY.define({
         name: "callLog",
         pluralName: "callLogs",
         observer: observer,
-        storage: options.dbMapper,
+        storage: new OBJY_CATALOG.mappers.storage.mongo(OBJY).useConnection(options.dbMapper, function() {})
+    })
+
+    OBJY.define({
+        name: "correspondence",
+        pluralName: "correspondences",
+        observer: observer,
+        storage: new OBJY_CATALOG.mappers.storage.mongo(OBJY).useConnection(options.dbMapper, function() {})
     })
 
     OBJY.define({
         name: "token",
         pluralName: "tokens",
         observer: observer,
-        storage: options.dbMapper,
+        storage: new OBJY_CATALOG.mappers.storage.mongo(OBJY).useConnection(options.dbMapper, function() {})
     })
 
     var isObject = function(a) {
@@ -153,6 +161,52 @@ var KJU = function(options) {
 
         });
 
+
+    router.route('/permitCorrespondence')
+
+        // get a token
+        .post(function(req, res) {
+
+            if (!req.query.token && !req.body.token)
+                return res.status(400).json({ err: 'no token provided' });
+
+            var contact = (req.body || {}).contact;
+
+            if (!contact) {
+                return res.status(400).json({ err: 'no contact provided' });
+            }
+
+            var decoded = jwt.verify(req.query.token || req.body.token, KEY);
+
+            if (!decoded)
+                return res.status(400).json({ err: 'invalid token' })
+
+            OBJY.correspondences({ "properties.sender.value": contact, "properties.reciever.value": decoded.contact }).get(data => {
+                if (data.length > 0 && !data[0].properties.permitted.value) {
+                    data[0].setPropertyValue('permitted', true).update(data => {
+                        return res.json({
+                            msg: 'ok'
+                        })
+                    }, err => {
+                        return res.status(400).json({
+                            msg: err
+                        })
+                    })
+                } else if (data.length > 0 && data[0].properties.permitted.value) {
+                    return res.json({
+                        msg: 'correspondence is permitted'
+                    })
+                } else if (data.length == 0) {
+                    return res.status(404).json({
+                        msg: 'correspondence not found'
+                    })
+                }
+            })
+
+
+        });
+
+
     router.route('/message')
 
         // create a message
@@ -163,6 +217,7 @@ var KJU = function(options) {
 
             OBJY.tokens({ "properties.data": req.query.token || req.body.token }).get(data => {
 
+
                 if (data.length != 1)
                     return res.status(400).json({ err: 'token not found' })
 
@@ -171,95 +226,141 @@ var KJU = function(options) {
                 if (!decoded)
                     return res.status(400).json({ err: 'invalid token' })
 
-                var msgId = new mongoose.Types.ObjectId();
-                var messageTag = req.body.messageTag || shortid.generate();
+                function createMessage() {
 
-                var consumerToken = jwt.sign({ msgId: msgId, messageTag: messageTag, priv: 'redeem' }, KEY);
+                    var msgId = new mongoose.Types.ObjectId();
+                    var messageTag = req.body.messageTag || shortid.generate();
 
-                var computedResponses = {};
+                    var consumerToken = jwt.sign({ msgId: msgId, messageTag: messageTag, priv: 'redeem' }, KEY);
 
-                var url = req.protocol + '://' + (HOST || req.get('host')) + '/kju-dummy'
+                    var computedResponses = {};
 
-                if (Array.isArray(req.body.responses)) {
-                    req.body.responses.forEach(res => {
-                        if (isObject(res)) {
+                    var url = req.protocol + '://' + (HOST || req.get('host')) + '/kju-dummy'
 
-                            computedResponses[res.title || shortid.generate()] = {
-                                type: "longText",
-                                properties: {
-                                    content: res.content,
-                                    link: url + '/api/message/' + msgId + '/response/' + (res.title || shortid.generate()) + '?token=' + consumerToken
+                    if (Array.isArray(req.body.responses)) {
+                        req.body.responses.forEach(res => {
+                            if (isObject(res)) {
+
+                                computedResponses[res.title || shortid.generate()] = {
+                                    type: "longText",
+                                    properties: {
+                                        content: res.content,
+                                        link: url + '/api/message/' + msgId + '/response/' + (res.title || shortid.generate()) + '?token=' + consumerToken
+                                    }
+                                }
+
+                            } else {
+                                computedResponses[res] = {
+                                    type: "bag",
+                                    properties: {
+                                        content: res.content,
+                                        link: url + '/api/message/' + msgId + '/response/' + res + '?token=' + consumerToken
+                                    }
                                 }
                             }
+                        })
+                    }
 
-                        } else {
-                            computedResponses[res] = {
+                    OBJY.message({
+                        name: req.body.content,
+                        _id: msgId,
+                        properties: {
+                            content: {
+                                type: "longText",
+                                value: req.body.content
+                            },
+                            responses: {
                                 type: "bag",
-                                properties: {
-                                    content: res.content,
-                                    link: url + '/api/message/' + msgId + '/response/' + res + '?token=' + consumerToken
-                                }
+                                properties: computedResponses
+                            },
+                            messageTag: {
+                                type: "shortText",
+                                value: messageTag
+                            },
+                            sender: {
+                                type: "shortText",
+                                value: decoded.contact
+                            },
+                            reciever: {
+                                type: "longText",
+                                value: req.body.reciever
+                            },
+                            consumerToken: {
+                                type: "longText",
+                                value: consumerToken
+                            },
+                            createdByHash: {
+                                type: "shortText",
+                                value: decoded.hash
                             }
                         }
+                    }).add(data => {
+
+                        var transportBody = req.body;
+
+                        transportBody._id = data._id;
+                        transportBody.responses = responsesToArray(data.properties.responses.properties);
+                        transportBody.consumerToken = consumerToken;
+
+                        if (options.transporter) options.transporter.transport(transportBody, (data) => {
+
+                        });
+
+                        res.json({
+                            _id: msgId,
+                            content: data.properties.content.value,
+                            responses: responsesToArray(data.properties.responses.properties),
+                            messageTag: data.properties.messageTag.value,
+                            reciever: data.properties.reciever.value,
+                            consumerToken: data.properties.consumerToken.value
+                        })
+                    }, err => {
+                        res.status(400).json({ err: "an error occured" })
                     })
                 }
 
-                OBJY.message({
-                    name: req.body.content,
-                    _id: msgId,
-                    properties: {
-                        content: {
-                            type: "longText",
-                            value: req.body.content
-                        },
-                        responses: {
-                            type: "bag",
-                            properties: computedResponses
-                        },
-                        messageTag: {
-                            type: "shortText",
-                            value: messageTag
-                        },
-                        sender: {
-                            type: "shortText",
-                            value: decoded.contact
-                        },
-                        reciever: {
-                            type: "longText",
-                            value: req.body.reciever
-                        },
-                        consumerToken: {
-                            type: "longText",
-                            value: consumerToken
-                        },
-                        createdByHash: {
-                            type: "shortText",
-                            value: decoded.hash
+                OBJY.correspondences({ "properties.sender.value": decoded.contact, "properties.reciever.value": req.body.reciever }).get(_data => {
+
+                    console.log('dd', _data.length)
+
+                    if (_data.length == 0) {
+                        // Pass through one time
+                        OBJY.correspondence({
+                            properties: {
+                                sender: {
+                                    type: 'shortText',
+                                    value: decoded.contact
+                                },
+                                reciever: {
+                                    type: 'shortText',
+                                    value: req.body.reciever
+                                },
+                                permitted: {
+                                    type: 'boolean',
+                                    value: false
+                                }
+                            }
+                        }).add(data => {
+                            createMessage()
+                        }, err => {
+                            res.status(400).json({ err: err })
+                        })
+                    } else if (_data.length >= 1) {
+                        console.log('dfl', _data)
+                        if (!_data[0].properties.permitted.value) {
+                            // NOT YET PERMITTED!
+                            return res.status(400).json({
+                                msg: 'correspondence not yet permitted'
+                            })
+                        } else {
+                            // OKAY
+                            createMessage()
                         }
+
                     }
-                }).add(data => {
 
-                    var transportBody = req.body;
-
-                    transportBody._id = data._id;
-                    transportBody.responses = responsesToArray(data.properties.responses.properties);
-                    transportBody.consumerToken = consumerToken;
-
-                    if (options.transporter) options.transporter.transport(transportBody, (data) => {
-
-                    });
-
-                    res.json({
-                        _id: msgId,
-                        content: data.properties.content.value,
-                        responses: responsesToArray(data.properties.responses.properties),
-                        messageTag: data.properties.messageTag.value,
-                        reciever: data.properties.reciever.value,
-                        consumerToken: data.properties.consumerToken.value
-                    })
-                }, err => {
-                    res.status(400).json({ err: "an error occured" })
                 })
+
 
             }, err => {
                 res.status(400).json({ err: err })
