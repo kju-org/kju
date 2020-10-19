@@ -40,6 +40,7 @@ Your kju server will offer the following REST Endpints:
 * `GET /messages?token=XXX` - Get a list of messages matching a messageTag (encoded inside the token)
 * `GET /message/:messageId/response/:responseId?token=XXX` - Redeem a response
 * `GET /message/:messageId/responses?token=XXX` - Get all responses for a message
+* `POST /permitCorrespondence?token=XXX` - Allow a given sender to send messages
 
 
 The following two API Endpoints can also be opened int he browser. kju will then render them with a tiny UI.
